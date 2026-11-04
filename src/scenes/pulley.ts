@@ -1,6 +1,7 @@
 import type { Params, Scene, SceneDef, SolutionStep, Vec2 } from "../engine/types";
 import { Camera, type Bounds } from "../engine/camera";
-import { COLORS, add, arrow, badge, block, grid, ground, label, scale } from "../engine/draw";
+import { COLORS, add, arrow, badge, block, grid, ground, label, scale, shape } from "../engine/draw";
+import { googlyGuy } from "../buddy/critters";
 
 const G = 9.8;
 const DEG = Math.PI / 180;
@@ -93,6 +94,13 @@ function createPulley(): Scene {
 
   return {
     reset() { restart(); },
+    status(p) {
+      const s = solveSystem(p);
+      if (hit) return "hit";
+      if (s.stuck) return "stuck";
+      if (!s.moving) return "balanced";
+      return p.mode === 1 ? "atwood" : "moving";
+    },
 
     step(dt, p) {
       // structural changes (mode, angle) restart the run so geometry stays valid
@@ -131,7 +139,7 @@ function createPulley(): Scene {
       const string = (a: Vec2, b: Vec2) => {
         const A = T(a), B = T(b);
         ctx.save();
-        ctx.strokeStyle = "#d9dde5";
+        ctx.strokeStyle = "#24262c";
         ctx.lineWidth = 1.6;
         ctx.beginPath();
         ctx.moveTo(A.x, A.y);
@@ -148,17 +156,17 @@ function createPulley(): Scene {
       if (p.mode === 0) {
         // table
         const tl = T({ x: 0, y: 4.5 }), tr = T({ x: 6.3, y: 4.5 });
-        ctx.fillStyle = "#232833";
-        ctx.fillRect(tl.x, tl.y, tr.x - tl.x, 0.18 * px);
-        ctx.fillRect(tl.x + 0.3 * px, tl.y, 0.18 * px, cam.oy - tl.y);
-        ctx.fillRect(tr.x - 0.6 * px, tl.y, 0.18 * px, cam.oy - tl.y);
+        const rect = (x: number, y: number, w: number, h: number) => shape(ctx, [{ x, y }, { x: x + w, y }, { x: x + w, y: y + h }, { x, y: y + h }], "#d9a066");
+        rect(tl.x + 0.3 * px, tl.y, 0.2 * px, cam.oy - tl.y);
+        rect(tr.x - 0.6 * px, tl.y, 0.2 * px, cam.oy - tl.y);
+        rect(tl.x, tl.y, tr.x - tl.x, 0.22 * px);
         m1c = { x: 2.0 + d, y: 5.0 };
         m2c = { x: pc.x + pr, y: 3.7 - d - s2 / 2 };
         string({ x: m1c.x + 0.5, y: 5.0 }, { x: pc.x, y: pc.y + pr });
         string({ x: pc.x + pr, y: pc.y }, { x: m2c.x, y: m2c.y + s2 / 2 });
         const M1 = T(m1c), M2 = T(m2c);
-        later.push(() => block(ctx, M1.x, M1.y, px, px, s.stuck ? "#4bd28f" : "#ff8a3d", 0, `m₁ ${fmt(p.m1, 1)}`));
-        later.push(() => block(ctx, M2.x, M2.y, s2 * px, s2 * px, "#5ad1ff", 0, `m₂ ${fmt(p.m2, 1)}`));
+        later.push(() => block(ctx, M1.x, M1.y, px, px, s.stuck ? "#6fcf97" : "#ff8a3d", 0, `m₁ ${fmt(p.m1, 1)}`));
+        later.push(() => block(ctx, M2.x, M2.y, s2 * px, s2 * px, "#6ec3ee", 0, `m₂ ${fmt(p.m2, 1)}`));
         // forces on m1
         arrow(ctx, T, m1c, { x: 0, y: -p.m1 * G * k }, COLORS.weight, "m₁g");
         arrow(ctx, T, m1c, { x: 0, y: s.N * k }, COLORS.normal, "N");
@@ -173,8 +181,7 @@ function createPulley(): Scene {
         const s1 = side(p.m1);
         // ceiling + rod
         const ce = T({ x: -1.2, y: 7 });
-        ctx.fillStyle = "#232833";
-        ctx.fillRect(ce.x, ce.y - 6, 2.4 * px, 8);
+        shape(ctx, [{ x: ce.x, y: ce.y - 10 }, { x: ce.x + 2.4 * px, y: ce.y - 10 }, { x: ce.x + 2.4 * px, y: ce.y }, { x: ce.x, y: ce.y }], "#d9a066");
         string({ x: 0, y: 7 }, pc);
         m1c = { x: -pr, y: 3.6 + d - s1 / 2 };
         m2c = { x: pr, y: 3.6 - d - s2 / 2 };
@@ -182,7 +189,7 @@ function createPulley(): Scene {
         string({ x: pr, y: pc.y }, { x: m2c.x, y: m2c.y + s2 / 2 });
         const M1 = T(m1c), M2 = T(m2c);
         later.push(() => block(ctx, M1.x, M1.y, s1 * px, s1 * px, "#ff8a3d", 0, `m₁ ${fmt(p.m1, 1)}`));
-        later.push(() => block(ctx, M2.x, M2.y, s2 * px, s2 * px, "#5ad1ff", 0, `m₂ ${fmt(p.m2, 1)}`));
+        later.push(() => block(ctx, M2.x, M2.y, s2 * px, s2 * px, "#6ec3ee", 0, `m₂ ${fmt(p.m2, 1)}`));
         arrow(ctx, T, { x: m1c.x - 0.15, y: m1c.y }, { x: 0, y: -p.m1 * G * k }, COLORS.weight, "m₁g");
         arrow(ctx, T, { x: m1c.x, y: m1c.y + s1 / 2 }, { x: 0, y: s.T * k }, COLORS.tension, "T");
         arrow(ctx, T, { x: m2c.x + 0.15, y: m2c.y }, { x: 0, y: -p.m2 * G * k }, COLORS.weight, "m₂g");
@@ -196,20 +203,10 @@ function createPulley(): Scene {
         const u = { x: Math.cos(th), y: Math.sin(th) }, n = { x: -Math.sin(th), y: Math.cos(th) };
         if (ped > 0) {
           const a = T({ x: -0.3, y: ped }), b = T({ x: topV.x + 0.3, y: 0 });
-          ctx.fillStyle = "#1c2029";
-          ctx.fillRect(a.x, a.y, b.x - a.x, b.y - a.y);
+          shape(ctx, [{ x: a.x, y: a.y }, { x: b.x, y: a.y }, { x: b.x, y: b.y }, { x: a.x, y: b.y }], "#e8dcc2");
         }
         const [A, B, C] = [T(corner), T(topV), T(foot)];
-        ctx.fillStyle = "#232833";
-        ctx.strokeStyle = "#3a4150";
-        ctx.lineWidth = 2;
-        ctx.beginPath();
-        ctx.moveTo(A.x, A.y);
-        ctx.lineTo(B.x, B.y);
-        ctx.lineTo(C.x, C.y);
-        ctx.closePath();
-        ctx.fill();
-        ctx.stroke();
+        shape(ctx, [A, B, C], "#d9a066");
         ctx.beginPath();
         ctx.arc(A.x, A.y, 40, -th, 0);
         ctx.strokeStyle = COLORS.muted;
@@ -223,8 +220,8 @@ function createPulley(): Scene {
         string(add(m1c, scale(u, 0.5)), add(pc, scale(n, pr)));
         string({ x: pc.x + pr, y: pc.y }, { x: m2c.x, y: m2c.y + s2 / 2 });
         const M1 = T(m1c), M2 = T(m2c);
-        later.push(() => block(ctx, M1.x, M1.y, px, px, s.stuck ? "#4bd28f" : "#ff8a3d", -th, `m₁ ${fmt(p.m1, 1)}`));
-        later.push(() => block(ctx, M2.x, M2.y, s2 * px, s2 * px, "#5ad1ff", 0, `m₂ ${fmt(p.m2, 1)}`));
+        later.push(() => block(ctx, M1.x, M1.y, px, px, s.stuck ? "#6fcf97" : "#ff8a3d", -th, `m₁ ${fmt(p.m1, 1)}`));
+        later.push(() => block(ctx, M2.x, M2.y, s2 * px, s2 * px, "#6ec3ee", 0, `m₂ ${fmt(p.m2, 1)}`));
         arrow(ctx, T, m1c, { x: 0, y: -p.m1 * G * k }, COLORS.weight, "m₁g");
         arrow(ctx, T, m1c, scale(n, s.N * k), COLORS.normal, "N");
         arrow(ctx, T, add(m1c, scale(u, 0.5)), scale(u, s.T * k), COLORS.tension, "T");
@@ -242,13 +239,17 @@ function createPulley(): Scene {
       ctx.save();
       ctx.translate(P.x, P.y);
       ctx.rotate(d / pr);
-      ctx.fillStyle = "#3a4150";
+      ctx.fillStyle = "#cfd8e6";
       ctx.beginPath();
       ctx.arc(0, 0, R, 0, Math.PI * 2);
       ctx.fill();
-      ctx.strokeStyle = "#9aa3b2";
-      ctx.lineWidth = 2;
+      ctx.strokeStyle = "#24262c";
+      ctx.lineWidth = 2.4;
       ctx.stroke();
+      ctx.fillStyle = "#24262c";
+      ctx.beginPath();
+      ctx.arc(0, 0, 3, 0, Math.PI * 2);
+      ctx.fill();
       for (let i = 0; i < 3; i++) {
         ctx.rotate((Math.PI * 2) / 3);
         ctx.beginPath();
@@ -258,11 +259,14 @@ function createPulley(): Scene {
       }
       ctx.restore();
 
+      // googly guy keeping an eye on m₂
+      googlyGuy(ctx, 44, cam.oy, 62, T(m2c));
+
       // HUD
       const status = s.stuck
-        ? ["STUCK · friction holds it", "#4bd28f"]
-        : !s.moving ? ["BALANCED · a = 0", "#4bd28f"]
-        : hit ? ["Hit the end · press Reset", "#9aa3b2"]
+        ? ["STUCK · friction holds it", "#6fcf97"]
+        : !s.moving ? ["BALANCED · a = 0", "#6fcf97"]
+        : hit ? ["Hit the end · press Reset", "#7d7668"]
         : [`MOVING · a = ${fmt(Math.abs(s.a))} m/s²`, "#ff8a3d"];
       badge(ctx, 14, 14, status[0], status[1]);
       label(ctx, `T = ${fmt(s.T)} N    v = ${fmt(Math.abs(v))} m/s    moved = ${fmt(Math.abs(d))} m    t = ${fmt(t)} s`, 14, 58, COLORS.muted);

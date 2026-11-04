@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { Params, PointerKind, Scene, Viewport } from "../engine/types";
+import { paper } from "../engine/draw";
 
 interface Props {
   scene: Scene;
@@ -71,7 +72,7 @@ export function CanvasStage({ scene, params, running, resetKey, onParams, pxPerM
         }
       }
       const view = viewRef.current;
-      ctx.clearRect(0, 0, view.width, view.height);
+      paper(ctx, view);
       scene.draw(ctx, view, paramsRef.current);
       raf = requestAnimationFrame(frame);
     };

@@ -1,32 +1,30 @@
-# React + TypeScript + Vite
+# Boing Boing ●
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+*the physics lab you never got*
 
-Currently, two official plugins are available:
+A notebook-doodle physics playground for JEE students. Build a setup from the **+** menu, or pick a question, predict the answer, and watch it happen with every force drawn and a step-by-step solution that updates live.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## What's inside
+- **Build mode:** drop items (ball, tower, building, wall, block, incline, table, pulley, bowl, insect, man, umbrella, rain, monkey, rope) on an empty page. When they make a classic setup, it snaps into a live simulation.
+- **Question mode:** 19 JEE-style questions. Lock in a prediction, then watch. Answers are computed from the same physics the simulation runs.
+- **Setups:** projectiles (+ wall, bounces), block on incline (static vs kinetic, push up the slope), strings & pulleys (table, Atwood, incline + hanging), insect in a bowl, rain-man (ground/man frame, tilt the umbrella), monkey on a rope (tension limit).
+- An elephant friend who reacts to what's happening, and a googly-eyed guy who watches the action.
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the Oxlint configuration
-
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
-
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+## Run
+```
+npm install
+npm run dev
 ```
 
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.
+## Structure
+```
+src/engine/     camera, drawing kit (sketchy ink, crayon fills), types
+src/scenes/     one file per setup: physics + drawing + solution
+src/builder/    + menu items, setup recognition, the page
+src/questions/  question bank + question card/list
+src/buddy/      elephant, critters, the elephant's lines (edit lines.ts!)
+```
+
+## Next
+- Paste-any-question AI parser
+- More setups: circular motion, springs, collisions

@@ -23,9 +23,11 @@ export interface Scene {
   step(dt: number, params: Params): void; // fixed dt, physics only
   draw(ctx: CanvasRenderingContext2D, view: Viewport, params: Params): void;
   /** Buttons declared in SceneDef.actions land here. */
-  action?(id: string, params: Params): void;
+  action?(id: string, params: Params): Partial<Params> | void;
   /** Mouse/touch on the canvas (CSS px). Return params to push them back into the sliders. */
   pointer?(kind: PointerKind, p: Vec2, params: Params): Partial<Params> | void;
+  /** A short key for what's happening right now ("sliding", "fast"...). The buddy reacts to it. */
+  status?(params: Params): string;
 }
 
 export interface Control {
@@ -40,6 +42,8 @@ export interface Control {
   options?: string[];
   /** Hide this control unless another control has one of these values. */
   showIf?: { key: string; in: number[] };
+  /** Not shown as a slider (set by the builder or a question). */
+  hidden?: boolean;
 }
 
 /** One row of the step-by-step solution panel. */

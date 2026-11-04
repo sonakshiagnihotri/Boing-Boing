@@ -1,10 +1,11 @@
 import type { Params, Scene, SceneDef, SolutionStep, Vec2 } from "../engine/types";
 import { Camera, type Bounds } from "../engine/camera";
-import { COLORS, arrow, badge, grid, ground, label } from "../engine/draw";
+import { COLORS, HAND, arrow, badge, ballDoodle, grid, ground, label, shape } from "../engine/draw";
+import { clock, dinoFriend, googlyGuy } from "../buddy/critters";
 
 const DEG = Math.PI / 180;
 const fmt = (x: number, d = 2) => (Math.abs(x) >= 1000 ? x.toFixed(0) : x.toFixed(d));
-const BALL_COLORS = ["#ff8a3d", "#5ad1ff", "#c792ff", "#4bd28f", "#ffd166", "#ff5d6c"];
+const BALL_COLORS = ["#ff8a3d", "#6ec3ee", "#b48cf0", "#6fcf97", "#ffd166", "#ff9fb4"];
 const MAX_BALLS = 6;
 
 interface Pt { t: number; x: number; y: number; vx: number; vy: number }
@@ -116,6 +117,8 @@ function createProjectile(): Scene {
   let predictedKey = "";
   let drag: Vec2 | null = null;
   let hover: Vec2 | null = null;
+  let landed = 0; // how many balls have touched down (dino hops on each new one)
+  let jumpAt = -10;
 
   const launch = (p: Params) => {
     const path = simulate(p);
@@ -135,6 +138,19 @@ function createProjectile(): Scene {
   };
 
   return {
+    status() {
+      if (drag) return "aiming";
+      const flying = balls.filter((b) => b.t < b.path.end);
+      if (flying.length) {
+        const b = flying[flying.length - 1];
+        if (b.snap.v >= 100) return "fast";
+        if (b.path.wallHit && b.t >= b.path.wallHit.t) return "wall";
+        return "flying";
+      }
+      if (balls.length >= 3) return "compare";
+      return balls.length ? "landed" : "idle";
+    },
+
     reset() {
 
       balls = [];
@@ -175,7 +191,7 @@ function createProjectile(): Scene {
     draw(ctx, vw, p) {
 
       const pred = predict(p);
-      if (!drag) cam.follow(bounds([pred, ...balls.map((b) => b.path)], p), vw);
+      if (!drag) cam.follow(bounds([pred, ...balls.map((b) => b.path)], p), vw, 0.12, { l: 130, r: 110, t: 70, b: 50 });
       const T = cam.toScreen;
 
       grid(ctx, vw, cam);
@@ -185,27 +201,36 @@ function createProjectile(): Scene {
       if (p.wall > 0) {
         const w0 = T({ x: p.wall, y: 0 });
         const top = Math.min(T({ x: 0, y: Math.max(p.h, pred.apex?.y ?? 0) * 1.1 + 1 }).y, w0.y - 40);
-        ctx.fillStyle = "#2a2f3a";
-        ctx.fillRect(w0.x, top, 10, w0.y - top);
-        ctx.fillStyle = "#3a4150";
-        ctx.fillRect(w0.x, top, 3, w0.y - top);
+        shape(ctx, [{ x: w0.x, y: top }, { x: w0.x + 14, y: top }, { x: w0.x + 14, y: w0.y }, { x: w0.x, y: w0.y }], COLORS.paperDeep);
         label(ctx, `wall · ${fmt(p.wall, 1)} m`, w0.x + 14, top + 10, COLORS.muted);
       }
 
       // tower
       const base = T({ x: 0, y: 0 }), top = T({ x: 0, y: p.h });
       if (p.h > 0) {
-        ctx.fillStyle = "#232833";
-        ctx.fillRect(base.x - 14, top.y, 14, base.y - top.y);
-        ctx.strokeStyle = "#3a4150";
-        ctx.strokeRect(base.x - 14 + 0.5, top.y + 0.5, 13, base.y - top.y - 1);
-        label(ctx, `h = ${fmt(p.h, 1)} m`, base.x - 20, (top.y + base.y) / 2, COLORS.muted, "right");
+        const tw = 26; // tower drawn as a doodled brick column
+        shape(ctx, [{ x: base.x - tw, y: top.y }, { x: base.x, y: top.y }, { x: base.x, y: base.y }, { x: base.x - tw, y: base.y }], "#e8b48a");
+        ctx.strokeStyle = "rgba(36,38,44,0.35)";
+        ctx.lineWidth = 1;
+        for (let yy = top.y + 12; yy < base.y - 4; yy += 12) {
+          ctx.beginPath(); ctx.moveTo(base.x - tw + 3, yy); ctx.lineTo(base.x - 3, yy); ctx.stroke();
+        }
+        label(ctx, `h = ${fmt(p.h, 1)} m`, base.x - 32, (top.y + base.y) / 2, COLORS.muted, "right");
       }
+
+      // ---- the gang: googly guy watches the action, dino hops when a ball lands ----
+      const nowLanded = balls.filter((b) => b.path.land && b.t >= b.path.land.t).length;
+      if (nowLanded > landed) jumpAt = clock();
+      landed = nowLanded;
+      const liveNow = [...balls].reverse().find((b) => b.t < b.path.end);
+      const watch = liveNow ? T(at(liveNow.path, liveNow.t)) : drag ?? hover ?? (pred.land ? T(pred.land) : null);
+      googlyGuy(ctx, Math.max(36, base.x - 70), cam.oy, 74, watch);
+      dinoFriend(ctx, vw.width - 58, cam.oy, 84, jumpAt, true);
 
       // ---- predicted path (the "what if") ----
       ctx.save();
       ctx.setLineDash([3, 6]);
-      ctx.strokeStyle = "rgba(232,234,240,0.45)";
+      ctx.strokeStyle = "rgba(36,38,44,0.45)";
       ctx.lineWidth = 1.5;
       ctx.beginPath();
       pred.pts.forEach((q, i) => {
@@ -219,7 +244,7 @@ function createProjectile(): Scene {
       const Tland = pred.land?.t ?? pred.end;
       if (Tland > 0) {
         const dtDot = niceDt(Tland);
-        ctx.fillStyle = "rgba(232,234,240,0.7)";
+        ctx.fillStyle = "rgba(36,38,44,0.7)";
         for (let t = dtDot; t < Tland - 1e-9; t += dtDot) {
           const s = T(at(pred, t));
           ctx.beginPath();
@@ -227,13 +252,13 @@ function createProjectile(): Scene {
           ctx.fill();
         }
         const lp = T(pred.land ?? pred.pts[pred.pts.length - 1]);
-        label(ctx, `dots every ${+dtDot.toFixed(4)} s`, lp.x, lp.y - 42, "rgba(232,234,240,0.6)", "center");
+        label(ctx, `dots every ${+dtDot.toFixed(4)} s`, lp.x, lp.y - 42, "rgba(36,38,44,0.6)", "center");
       }
 
       // apex + landing markers
       if (pred.apex && pred.apex.t > 0.0001) {
         const a = T(pred.apex);
-        ctx.strokeStyle = "rgba(255,209,102,0.5)";
+        ctx.strokeStyle = "rgba(208,143,0,0.5)";
         ctx.setLineDash([2, 4]);
         ctx.beginPath();
         ctx.moveTo(a.x, a.y);
@@ -258,10 +283,10 @@ function createProjectile(): Scene {
         const now = at(b.path, b.t);
         ctx.save();
         ctx.strokeStyle = b.color;
-        ctx.lineWidth = 2.5;
-        ctx.shadowColor = b.color;
-        ctx.shadowBlur = 10;
-        ctx.globalAlpha = 0.85;
+        ctx.lineWidth = 3.5;
+        ctx.lineCap = "round";
+        ctx.lineJoin = "round";
+        ctx.globalAlpha = 0.9;
         ctx.beginPath();
         let started = false;
         for (const q of b.path.pts) {
@@ -274,14 +299,7 @@ function createProjectile(): Scene {
         ctx.stroke();
         ctx.restore();
 
-        ctx.save();
-        ctx.fillStyle = b.color;
-        ctx.shadowColor = b.color;
-        ctx.shadowBlur = 16;
-        ctx.beginPath();
-        ctx.arc(sNow.x, sNow.y, 7, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        ballDoodle(ctx, sNow.x, sNow.y, 9, b.color);
       }
 
       // velocity + components on the newest ball still flying
@@ -290,23 +308,23 @@ function createProjectile(): Scene {
         const now = at(live.path, live.t);
         const k = 70 / (cam.scale * Math.max(live.snap.v, Math.hypot(now.vx, now.vy), 1));
         arrow(ctx, T, now, { x: now.vx * k, y: now.vy * k }, COLORS.velocity, "v");
-        arrow(ctx, T, now, { x: now.vx * k, y: 0 }, "rgba(90,209,255,0.55)", "vx", { dashed: true, width: 1.5 });
-        arrow(ctx, T, now, { x: 0, y: now.vy * k }, "rgba(90,209,255,0.55)", "vy", { dashed: true, width: 1.5 });
+        arrow(ctx, T, now, { x: now.vx * k, y: 0 }, "rgba(47,127,216,0.6)", "vx", { dashed: true, width: 1.5 });
+        arrow(ctx, T, now, { x: 0, y: now.vy * k }, "rgba(47,127,216,0.6)", "vy", { dashed: true, width: 1.5 });
       }
 
       // launcher + aim line
       ctx.save();
       ctx.translate(top.x, top.y);
       ctx.rotate(-p.angle * DEG);
-      ctx.fillStyle = "#3a4150";
+      ctx.fillStyle = "#7d7668";
+      ctx.strokeStyle = "#24262c";
+      ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.roundRect(-4, -6, 34, 12, 5);
+      ctx.roundRect(-4, -7, 38, 14, 5);
       ctx.fill();
+      ctx.stroke();
       ctx.restore();
-      ctx.fillStyle = "#e8eaf0";
-      ctx.beginPath();
-      ctx.arc(top.x, top.y, 7, 0, Math.PI * 2);
-      ctx.fill();
+      ballDoodle(ctx, top.x, top.y, 9, "#ff8a3d");
       if (drag) {
         ctx.save();
         ctx.strokeStyle = "rgba(255,138,61,0.8)";
@@ -317,33 +335,30 @@ function createProjectile(): Scene {
         ctx.lineTo(drag.x, drag.y);
         ctx.stroke();
         ctx.restore();
-        label(ctx, `${fmt(p.v, 1)} m/s @ ${p.angle}°`, drag.x + 12, drag.y - 12, "#ff8a3d", "left", "600 13px ui-monospace, monospace");
+        label(ctx, `${fmt(p.v, 1)} m/s @ ${p.angle}°`, drag.x + 12, drag.y - 12, "#d9661a", "left");
       }
 
       // ---- HUD: legend of launched balls ----
       let y = 16;
       const sp = timeScale >= 1 ? `⏩ ${fmt(timeScale, 1)}× speed` : `🐢 ${fmt(timeScale, 2)}× slow-mo`;
-      if (balls.length) { badge(ctx, 14, y, sp, "#232833", COLORS.muted); y += 36; }
+      if (balls.length) { badge(ctx, 14, y, sp, "#e3dccb", COLORS.muted); y += 36; }
       for (const b of balls) {
         const s = b.snap;
-        ctx.fillStyle = b.color;
-        ctx.beginPath();
-        ctx.arc(22, y + 6, 5, 0, Math.PI * 2);
-        ctx.fill();
+        ballDoodle(ctx, 22, y + 6, 6, b.color);
         const R = b.path.land ? `R=${fmt(b.path.land.x, 1)} m  T=${fmt(b.path.land.t, 2)} s` : "";
         label(ctx, `v=${fmt(s.v, 1)} θ=${s.angle}° h=${fmt(s.h, 1)}   ${R}`, 34, y + 6, COLORS.text);
         y += 20;
       }
       if (!balls.length) {
         const narrow = vw.width < 640;
-        label(ctx, narrow ? "Drag from the launcher to aim." : "Drag from the launcher to aim and release to fire, or hit Launch.", 16, 24, COLORS.muted, "left", "13px system-ui, sans-serif");
-        label(ctx, narrow ? "Dotted line = where it WILL go." : "Dotted line = where it WILL go. Change a slider and watch it move.", 16, 44, COLORS.muted, "left", "13px system-ui, sans-serif");
+        label(ctx, narrow ? "Drag from the launcher to aim." : "Drag from the launcher to aim and release to fire, or hit Launch.", 16, 24, COLORS.muted, "left", `600 17px ${HAND}`);
+        label(ctx, narrow ? "Dotted line = where it WILL go." : "Dotted line = where it WILL go. Change a slider and watch it move.", 16, 44, COLORS.muted, "left", `600 17px ${HAND}`);
       }
 
       // ---- hover probe: read t, x, y, v at any point on any path ----
       if (hover && !drag) {
         let best: { q: Pt; d: number; c: string } | null = null;
-        const paths: [Path, string, number][] = [[pred, "#e8eaf0", Infinity], ...balls.map((b) => [b.path, b.color, b.t] as [Path, string, number])];
+        const paths: [Path, string, number][] = [[pred, "#24262c", Infinity], ...balls.map((b) => [b.path, b.color, b.t] as [Path, string, number])];
         for (const [path, c, tmax] of paths) {
           for (let i = 0; i < path.pts.length; i += 2) {
             const q = path.pts[i];
@@ -361,13 +376,14 @@ function createProjectile(): Scene {
           ctx.fill();
           const lines = [`t = ${fmt(q.t)} s`, `x = ${fmt(q.x)} m   y = ${fmt(q.y)} m`, `vx = ${fmt(q.vx)}   vy = ${fmt(q.vy)} m/s`, `|v| = ${fmt(Math.hypot(q.vx, q.vy))} m/s`];
           const bx = Math.min(s.x + 14, vw.width - 220), by = Math.max(s.y - 90, 8);
-          ctx.fillStyle = "rgba(20,23,29,0.92)";
-          ctx.strokeStyle = best.c;
+          ctx.fillStyle = "rgba(255,253,247,0.96)";
+          ctx.strokeStyle = "#24262c";
+          ctx.lineWidth = 2;
           ctx.beginPath();
-          ctx.roundRect(bx, by, 210, 78, 8);
+          ctx.roundRect(bx, by, 220, 84, 8);
           ctx.fill();
           ctx.stroke();
-          lines.forEach((l, i) => label(ctx, l, bx + 10, by + 14 + i * 17, i ? COLORS.text : best!.c));
+          lines.forEach((l, i) => label(ctx, l, bx + 10, by + 14 + i * 19, COLORS.text, "left", i ? undefined : `700 16px ${HAND}`));
         }
       }
     },

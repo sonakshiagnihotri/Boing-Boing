@@ -1,6 +1,7 @@
 import type { Params, Scene, SceneDef, SolutionStep, Vec2 } from "../engine/types";
 import { Camera } from "../engine/camera";
-import { COLORS, add, arrow, badge, block, grid, ground, label, scale } from "../engine/draw";
+import { COLORS, add, arrow, badge, block, grid, ground, label, scale, shape } from "../engine/draw";
+import { googlyGuy } from "../buddy/critters";
 
 const G = 9.8;
 const BLOCK = 1.2; // block side, m
@@ -63,6 +64,11 @@ function createIncline(): Scene {
   return {
     reset(_vw, p) { start(p); },
     action(id, p) { if (id === "reset") start(p); },
+    status(p) {
+      if (state !== "rest") return state;
+      const r = analyze(p).repose;
+      return p.theta > r - 3 ? "edge" : "rest"; // within 3° of slipping
+    },
 
     step(dt, p) {
       if (state === "bottom") return;
@@ -100,18 +106,9 @@ function createIncline(): Scene {
       grid(ctx, vw, cam);
       ground(ctx, cam.oy, 0, vw.width);
 
-      // incline
+      // incline: a doodled wooden ramp
       const [pt, pb, pc] = [T(g.top), T(g.bottom), T(g.corner)];
-      ctx.beginPath();
-      ctx.moveTo(pt.x, pt.y);
-      ctx.lineTo(pb.x, pb.y);
-      ctx.lineTo(pc.x, pc.y);
-      ctx.closePath();
-      ctx.fillStyle = "#1c2029";
-      ctx.fill();
-      ctx.strokeStyle = "#3a4150";
-      ctx.lineWidth = 2;
-      ctx.stroke();
+      shape(ctx, [pt, pb, pc], "#d9a066");
 
       // θ arc at the bottom vertex
       const th = p.theta * DEG;
@@ -120,7 +117,7 @@ function createIncline(): Scene {
       ctx.strokeStyle = COLORS.muted;
       ctx.lineWidth = 1.5;
       ctx.stroke();
-      label(ctx, `θ = ${fmt(p.theta, 1)}°`, pb.x - 60, pb.y - 14, COLORS.text, "right", "13px ui-monospace, monospace");
+      label(ctx, `θ = ${fmt(p.theta, 1)}°`, pb.x - 60, pb.y - 14, COLORS.text, "right");
 
       // ghost line at the angle of repose: steeper than this and it slips
       const r = a.repose * DEG;
@@ -128,13 +125,13 @@ function createIncline(): Scene {
       const ghostEnd = T({ x: g.bottom.x - ghostLen * Math.cos(r), y: ghostLen * Math.sin(r) });
       ctx.save();
       ctx.setLineDash([4, 6]);
-      ctx.strokeStyle = "rgba(255,209,102,0.45)";
+      ctx.strokeStyle = "rgba(208,143,0,0.45)";
       ctx.beginPath();
       ctx.moveTo(pb.x, pb.y);
       ctx.lineTo(ghostEnd.x, ghostEnd.y);
       ctx.stroke();
       ctx.restore();
-      label(ctx, `slips above ${fmt(a.repose, 1)}°`, ghostEnd.x, ghostEnd.y - 12, "rgba(255,209,102,0.85)", "center");
+      label(ctx, `slips above ${fmt(a.repose, 1)}°`, ghostEnd.x, ghostEnd.y - 12, "rgba(208,143,0,0.85)", "center");
 
       // fading trail of where the block has been
       trail.forEach((ts, i) => {
@@ -148,7 +145,7 @@ function createIncline(): Scene {
       // block
       const c = add(add(g.top, scale(g.d, s)), scale(g.n, BLOCK / 2));
       const cs = T(c);
-      const col = state === "rest" ? "#4bd28f" : state === "up" ? "#c792ff" : state === "bottom" ? "#6b7280" : "#ff8a3d";
+      const col = state === "rest" ? "#6fcf97" : state === "up" ? "#b48cf0" : state === "bottom" ? "#b8b0a0" : "#ff8a3d";
       block(ctx, cs.x, cs.y, BLOCK * px, BLOCK * px, col, th);
 
       // forces: scale so mg is always ~2.6 m long
@@ -162,18 +159,21 @@ function createIncline(): Scene {
       arrow(ctx, T, c, { x: 0, y: -a.W * k }, COLORS.weight, "mg");
       arrow(ctx, T, c, scale(g.n, a.N * k), COLORS.normal, "N");
       if (fVec) arrow(ctx, T, add(c, scale(g.n, -BLOCK / 2)), fVec, COLORS.friction, state === "rest" ? "fₛ" : "fₖ");
-      arrow(ctx, T, c, scale(g.d, a.along * k), "rgba(255,93,108,0.55)", "mg sinθ", { dashed: true, width: 1.5 });
-      arrow(ctx, T, c, scale(g.n, -a.perp * k), "rgba(255,93,108,0.55)", "mg cosθ", { dashed: true, width: 1.5 });
+      arrow(ctx, T, c, scale(g.d, a.along * k), "rgba(226,72,61,0.6)", "mg sinθ", { dashed: true, width: 1.5 });
+      arrow(ctx, T, c, scale(g.n, -a.perp * k), "rgba(226,72,61,0.6)", "mg cosθ", { dashed: true, width: 1.5 });
       if (Math.abs(v) > 0.01) {
         arrow(ctx, T, add(c, scale(g.n, BLOCK * 0.9)), scale(g.d, Math.sign(v) * Math.min(2.2, 0.4 + Math.abs(v) * 0.25)), COLORS.accel, "v", { width: 3 });
       }
 
+      // the gang: googly guy perched on top of the slope watching the block, crab on the beach, a dragonfly
+      googlyGuy(ctx, pt.x + 4, pt.y, 62, cs);
+
       // status + live readout
       const status =
-        state === "rest" ? ["AT REST · static friction holds", "#4bd28f"]
-        : state === "up" ? ["GOING UP · gravity + friction both slow it", "#c792ff"]
+        state === "rest" ? ["AT REST · static friction holds", "#6fcf97"]
+        : state === "up" ? ["GOING UP · gravity + friction both slow it", "#b48cf0"]
         : state === "sliding" ? ["SLIDING DOWN · kinetic friction", "#ff8a3d"]
-        : ["Reached the bottom · hit Run again", "#9aa3b2"];
+        : ["Reached the bottom · hit Run again", "#7d7668"];
       badge(ctx, 14, 14, status[0], status[1]);
       const aNow = state === "sliding" ? (a.along - a.fk) / p.m : state === "up" ? a.aUp : 0;
       label(ctx, `v = ${fmt(Math.abs(v))} m/s ${v < 0 ? "↑" : v > 0 ? "↓" : ""}   a = ${fmt(aNow)} m/s²   t = ${fmt(t)} s   distance = ${fmt(travelled)} m`, 14, 58, COLORS.muted);
