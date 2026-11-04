@@ -1,22 +1,20 @@
 import { useEffect, useRef, useState } from "react";
 import type { Params, Scene } from "../engine/types";
-import { LINES, TAPS } from "./lines";
+import { GENERIC_TAPS, LINES, TAPS } from "./lines";
 
-const pick = <T,>(arr: T[], not?: T) => {
-  const pool = arr.length > 1 ? arr.filter((x) => x !== not) : arr;
-  return pool[Math.floor(Math.random() * pool.length)];
-};
+const SETTLE_MS = 900; // after a slider stops moving, re-explain with the new numbers
 
 /**
- * The elephant friend. Watches the scene's status() and says something when it changes.
+ * The haathi, a teacher. Watches what's happening (status) and the numbers on screen (params),
+ * and explains with the actual maths. Speaks when the situation changes, or when you stop dragging a slider.
  */
 export function Buddy({ sceneId, scene, params }: { sceneId: string; scene: Scene; params: Params }) {
   const [line, setLine] = useState("");
   const [hop, setHop] = useState(0); // bump to replay the hop animation
   const [open, setOpen] = useState(true);
-  const lastKey = useRef("");
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const memo = useRef({ status: "", saidFor: "", changedAt: 0, lastParams: "", variant: 0, tap: 0 });
 
   const say = (text: string) => {
     setLine(text);
@@ -25,16 +23,36 @@ export function Buddy({ sceneId, scene, params }: { sceneId: string; scene: Scen
   };
 
   useEffect(() => {
-    lastKey.current = "";
+    memo.current = { status: "", saidFor: "", changedAt: 0, lastParams: "", variant: 0, tap: 0 };
     const id = setInterval(() => {
-      const key = scene.status?.(paramsRef.current) ?? "";
-      if (key === lastKey.current) return;
-      lastKey.current = key;
-      const options = LINES[sceneId]?.[key];
-      if (options?.length) say(pick(options));
+      const m = memo.current;
+      const p = paramsRef.current;
+      const status = scene.status?.(p) ?? "";
+      const pk = JSON.stringify(p);
+      const now = performance.now();
+      if (pk !== m.lastParams) { m.lastParams = pk; m.changedAt = now; }
+
+      const build = LINES[sceneId]?.[status];
+      if (!build) return;
+      const statusChanged = status !== m.status;
+      const settledNewNumbers = !statusChanged && pk !== m.saidFor && now - m.changedAt > SETTLE_MS;
+      if (!statusChanged && !settledNewNumbers) return;
+
+      const options = build(p);
+      if (statusChanged) m.variant = Math.floor(Math.random() * options.length);
+      m.status = status;
+      m.saidFor = pk;
+      say(options[m.variant % options.length]); // same explanation, fresh numbers
     }, 250);
     return () => clearInterval(id);
   }, [scene, sceneId]);
+
+  const tap = () => {
+    const m = memo.current;
+    const options = [...(TAPS[sceneId]?.(paramsRef.current) ?? []), ...GENERIC_TAPS];
+    m.tap = (m.tap + 1) % options.length;
+    say(options[m.tap]);
+  };
 
   return (
     <div className="buddy">
@@ -43,7 +61,7 @@ export function Buddy({ sceneId, scene, params }: { sceneId: string; scene: Scen
           {line}
         </div>
       )}
-      <button className="buddy-btn" aria-label="Ask the elephant for a hint" onClick={() => say(pick(TAPS, line))}>
+      <button className="buddy-btn" aria-label="Ask the haathi for a challenge" onClick={tap}>
         <Elephant hopKey={hop} />
       </button>
     </div>
